@@ -1,7 +1,7 @@
 package manager
 
 import (
-	"vitals/source/models/paths"
+	"github.com/MHunterDev/explorer/source/models/paths"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"

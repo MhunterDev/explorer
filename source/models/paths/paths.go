@@ -4,7 +4,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	tree "vitals/source/tree"
+	"github.com/MHunterDev/explorer/source/tree"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

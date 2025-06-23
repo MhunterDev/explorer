@@ -1,7 +1,7 @@
 package main
 
 import (
-	"vitals/source/models/manager"
+	"github.com/MHunterDev/explorer/source/models/manager"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
