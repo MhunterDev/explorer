@@ -31,19 +31,35 @@ func (s *status) Error() error {
 }
 
 func dirInfo(path string) ([]os.DirEntry, status) {
+	// Validate path
+	if path == "" {
+		return nil, status{
+			code: 1,
+			msg:  "Empty path provided",
+		}
+	}
+
+	// Check if path exists and is accessible
+	if _, err := os.Stat(path); err != nil {
+		l.Error("base", err.Error())
+		return nil, status{
+			code: 1,
+			msg:  fmt.Sprintf("Path not accessible: %v", err),
+		}
+	}
 
 	dir, err := os.ReadDir(path)
 	if err != nil {
 		l.Error("base", err.Error())
 		return nil, status{
 			code: 1,
-			msg:  fmt.Sprintf("Error reading root directory: %v", err),
+			msg:  fmt.Sprintf("Error reading directory: %v", err),
 		}
 	}
 
 	return dir, status{
 		code: 0,
-		msg:  "Root directory read successfully",
+		msg:  "Directory read successfully",
 	}
 }
 
@@ -197,7 +213,12 @@ func (fv *FileView) TypeBreak() (int, int, int) {
 }
 
 func (fv *FileView) Expand(dir string) (nfv *FileView, s status) {
-	var sub FileView
+	if dir == "" {
+		return nil, status{
+			code: 1,
+			msg:  "Empty directory name provided",
+		}
+	}
 
 	// Use absolute path instead of relative to current working directory
 	subDir := filepath.Join(fv.Name, dir)
@@ -213,6 +234,9 @@ func (fv *FileView) Expand(dir string) (nfv *FileView, s status) {
 		subDir = filepath.Join(current, subDir)
 	}
 
+	// Clean the path to prevent directory traversal
+	subDir = filepath.Clean(subDir)
+
 	d, err := os.ReadDir(subDir)
 	if err != nil {
 		l.Error("base", err.Error())
@@ -221,16 +245,24 @@ func (fv *FileView) Expand(dir string) (nfv *FileView, s status) {
 			msg:  fmt.Sprintf("Error reading directory %s: %v", dir, err),
 		}
 	}
+
+	var sub FileView
 	sub.Dirs, s = pathInfo(d)
-	if s.code != 0 {
+	if s.code == 2 {
+		// No directories is not an error
+		sub.Dirs = []string{}
+		s.code = 0
+	} else if s.code != 0 {
 		l.Error("base", s.msg)
 		return nil, s
 	}
+
 	sub.Files, sub.Execs, s = fileInfo(d)
 	if s.code != 0 {
 		l.Error("base", s.msg)
 		return nil, s
 	}
+
 	sub.Name = subDir
 	return &sub, status{
 		code: 0,

@@ -54,6 +54,11 @@ func (v *Viewer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				v.Cursor++
 			}
 		case "enter":
+			maxItems := len(v.Current.View.Dirs) + len(v.Current.View.Files) + len(v.Current.View.Execs)
+			if v.Cursor >= maxItems {
+				return v, nil // Bounds check
+			}
+
 			if v.Cursor < len(v.Current.View.Dirs) {
 				dirName := v.Current.View.Dirs[v.Cursor]
 				newView := tree.NewFileView(filepath.Join(v.Current.Name, dirName))
@@ -81,8 +86,10 @@ func (v *Viewer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return v, nil
 			}
-			if v.Cursor >= len(v.Current.View.Dirs) && v.Cursor < (len(v.Current.View.Files)+len(v.Current.View.Dirs)) {
-				fileName := v.Current.View.Files[v.Cursor-len(v.Current.View.Dirs)]
+
+			fileIndex := v.Cursor - len(v.Current.View.Dirs)
+			if fileIndex >= 0 && fileIndex < len(v.Current.View.Files) {
+				fileName := v.Current.View.Files[fileIndex]
 				filePath := filepath.Join(v.Current.Name, fileName)
 
 				// Check file size before reading (limit to 10MB)
@@ -98,7 +105,7 @@ func (v *Viewer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return v, g.UpdatePortal()
 				}
 
-				// Read file content directly instead of using less
+				// Read file content directly
 				content, err := os.ReadFile(filePath)
 				if err != nil {
 					g := PortalMsg{Content: "", Err: err}

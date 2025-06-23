@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/MHunterDev/explorer/source/models/manager/handlers"
 	"github.com/MHunterDev/explorer/source/models/paths"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -46,6 +47,19 @@ func (m *Manager) Init() tea.Cmd {
 	return nil
 }
 
+func clampViewportOffset(vp *viewport.Model) {
+	maxOffset := vp.TotalLineCount() - vp.Height
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	if vp.YOffset > maxOffset {
+		vp.SetYOffset(maxOffset)
+	}
+	if vp.YOffset < 0 {
+		vp.SetYOffset(0)
+	}
+}
+
 func (m *Manager) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
@@ -56,16 +70,49 @@ func (m *Manager) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "ctrl+c":
 				return m, tea.Quit
-			case "enter":
-				m.Input.Reset()
-				return m, nil
 			case "left":
 				m.Selection = 1 // Switch to Viewer
+				m.Input.Blur()
 				return m, nil
+			case "pgup":
+				m.Portal.SetYOffset(m.Portal.YOffset - m.Portal.Height)
+				clampViewportOffset(&m.Portal)
+				return m, nil
+			case "pgdown":
+				m.Portal.SetYOffset(m.Portal.YOffset + m.Portal.Height)
+				clampViewportOffset(&m.Portal)
+				return m, nil
+			case "home":
+				m.Portal.GotoTop()
+				return m, nil
+			case "end":
+				m.Portal.GotoBottom()
+				return m, nil
+			case "enter":
+				if m.Input.Value() != "" {
+					m.Portal.SetContent(m.Portal.View() + "\n> " + m.Input.Value())
+					// Handle the command input and return the command
+					cmd = handlers.HandleCMD(m.Input.Value())
+					m.Input.Reset()
+					clampViewportOffset(&m.Portal)
+					return m, cmd
+				}
 			}
+		case handlers.HandlerMsg:
+			cur := m.Portal.View() + "\n"
+			if msg.Error() != nil {
+				m.Portal.SetContent(cur + "Error: " + msg.Error().Error())
+			} else {
+				m.Portal.SetContent(cur + msg.Msg)
+			}
+			m.Portal.GotoBottom()
+			clampViewportOffset(&m.Portal)
+			return m, nil
 		}
+
 		m.Input, cmd = m.Input.Update(msg)
 		m.Portal, _ = m.Portal.Update(msg)
+		clampViewportOffset(&m.Portal)
 		return m, cmd
 
 	case 1: // Viewer mode
@@ -76,41 +123,38 @@ func (m *Manager) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			case "right":
 				m.Selection = 0 // Switch to Input
+				m.Input.Focus()
 				return m, nil
 			case "pgup":
 				m.Portal.SetYOffset(m.Portal.YOffset - m.Portal.Height)
+				clampViewportOffset(&m.Portal)
 				return m, nil
 			case "pgdown":
 				m.Portal.SetYOffset(m.Portal.YOffset + m.Portal.Height)
+				clampViewportOffset(&m.Portal)
 				return m, nil
 			case "home":
-				m.Portal.SetYOffset(m.Portal.YOffset + m.Portal.Height)
 				m.Portal.GotoTop()
 				return m, nil
 			case "end":
-				m.Portal.SetYOffset(m.Portal.YOffset - m.Portal.Height)
 				m.Portal.GotoBottom()
 				return m, nil
 			}
-
 		}
 
 		switch msg := msg.(type) {
 		case paths.PortalMsg:
-			cur := m.Portal.View() + "\n"
 			if msg.Error() != nil {
-				m.Portal.SetContent(cur + "Error: " + msg.Error().Error())
-				m.Portal.GotoBottom()
+				m.Portal.SetContent("Error: " + msg.Error().Error())
 			} else {
 				data, err := os.ReadFile(filepath.Join("", msg.String()))
 				if err != nil {
-					m.Portal.SetContent(cur + "Error reading file: " + err.Error())
+					m.Portal.SetContent("Error reading file: " + err.Error())
 				} else {
-					m.Portal.SetContent(cur + string(data))
-					m.Portal.GotoBottom()
+					m.Portal.SetContent(string(data))
 				}
 			}
-
+			clampViewportOffset(&m.Portal)
 			return m, nil
 		}
 
