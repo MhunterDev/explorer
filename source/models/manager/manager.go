@@ -14,8 +14,9 @@ import (
 
 var (
 	viewPosStyle = lipgloss.NewStyle().Align(lipgloss.Left).Padding(0, 1, 0, 0)
-	inputStyle   = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).Padding(1)
-	vpStyle      = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).Padding(1)
+	inputStyle   = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).Padding(1).MarginLeft(2)
+	vpStyle      = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).Padding(1).MarginLeft(2)
+	inUse        = lipgloss.NewStyle().Align(lipgloss.Left).Padding(0, 1, 0, 0).Foreground(lipgloss.Color("13"))
 )
 
 type Manager struct {
@@ -124,7 +125,12 @@ func (m *Manager) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Manager) View() string {
-	v := viewPosStyle.Render(m.Viewer.View())
+	var v string
+	if m.Selection == 1 {
+		v = inUse.Render(m.Viewer.View())
+	} else {
+		v = viewPosStyle.Render(m.Viewer.View())
+	}
 	input := inputStyle.Render(m.Input.View())
 	vp := vpStyle.Render(m.Portal.View() + "\n")
 
