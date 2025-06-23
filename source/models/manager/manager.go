@@ -12,6 +12,12 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+var (
+	viewPosStyle = lipgloss.NewStyle().Align(lipgloss.Left).Padding(0, 1, 0, 0)
+	inputStyle   = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).Padding(1)
+	vpStyle      = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).Padding(1)
+)
+
 type Manager struct {
 	Selection int
 	Viewer    *paths.Viewer
@@ -70,22 +76,40 @@ func (m *Manager) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "right":
 				m.Selection = 0 // Switch to Input
 				return m, nil
+			case "pgup":
+				m.Portal.SetYOffset(m.Portal.YOffset - m.Portal.Height)
+				return m, nil
+			case "pgdown":
+				m.Portal.SetYOffset(m.Portal.YOffset + m.Portal.Height)
+				return m, nil
+			case "home":
+				m.Portal.SetYOffset(m.Portal.YOffset + m.Portal.Height)
+				m.Portal.GotoTop()
+				return m, nil
+			case "end":
+				m.Portal.SetYOffset(m.Portal.YOffset - m.Portal.Height)
+				m.Portal.GotoBottom()
+				return m, nil
 			}
 
 		}
 
 		switch msg := msg.(type) {
 		case paths.PortalMsg:
+			cur := m.Portal.View() + "\n"
 			if msg.Error() != nil {
-				m.Portal.SetContent("Error: " + msg.Error().Error())
+				m.Portal.SetContent(cur + "Error: " + msg.Error().Error())
+				m.Portal.GotoBottom()
 			} else {
 				data, err := os.ReadFile(filepath.Join("", msg.String()))
 				if err != nil {
-					m.Portal.SetContent("Error reading file: " + err.Error())
+					m.Portal.SetContent(cur + "Error reading file: " + err.Error())
 				} else {
-					m.Portal.SetContent(string(data))
+					m.Portal.SetContent(cur + string(data))
+					m.Portal.GotoBottom()
 				}
 			}
+
 			return m, nil
 		}
 
@@ -98,12 +122,6 @@ func (m *Manager) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	return m, nil
 }
-
-var (
-	viewPosStyle = lipgloss.NewStyle().Align(lipgloss.Left).Padding(0, 1, 0, 0)
-	inputStyle   = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).Padding(1)
-	vpStyle      = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).Padding(1)
-)
 
 func (m *Manager) View() string {
 	v := viewPosStyle.Render(m.Viewer.View())
