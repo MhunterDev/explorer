@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/MhunterDev/log4"
 	"github.com/charmbracelet/lipgloss"
@@ -106,7 +107,31 @@ type FileView struct {
 	Execs []string
 }
 
+type cachedFileView struct {
+	view      *FileView
+	timestamp time.Time
+}
+
+var viewCache = make(map[string]cachedFileView)
+
+const cacheTimeout = 5 * time.Second
+
 func NewFileView(path string) *FileView {
+	if cached, exists := viewCache[path]; exists {
+		if time.Since(cached.timestamp) < cacheTimeout {
+			return cached.view
+		}
+	}
+
+	// Validate path
+	if path == "" {
+		l.Error("base", "Empty path provided")
+		return nil
+	}
+
+	// Clean the path
+	path = filepath.Clean(path)
+
 	d, s := dirInfo(path)
 	if s.code != 0 {
 		l.Error("base", s.msg)
@@ -114,7 +139,10 @@ func NewFileView(path string) *FileView {
 	}
 
 	dirs, s := pathInfo(d)
-	if s.code != 0 {
+	if s.code == 2 {
+		// No directories is not an error, just empty slice
+		dirs = []string{}
+	} else if s.code != 0 {
 		l.Error("Failed to get directories: %s", s.msg)
 		return nil
 	}
@@ -125,12 +153,14 @@ func NewFileView(path string) *FileView {
 		return nil
 	}
 
-	return &FileView{
-		Name:  filepath.Base(path),
+	view := &FileView{
+		Name:  path, // Store full path instead of base
 		Dirs:  dirs,
 		Files: files,
 		Execs: execs,
 	}
+	viewCache[path] = cachedFileView{view: view, timestamp: time.Now()}
+	return view
 }
 
 func NewPath(path string) *FileView {
@@ -168,15 +198,21 @@ func (fv *FileView) TypeBreak() (int, int, int) {
 
 func (fv *FileView) Expand(dir string) (nfv *FileView, s status) {
 	var sub FileView
-	current, err := os.Getwd()
-	if err != nil {
-		l.Error("base", err.Error())
-		return nil, status{
-			code: 1,
-			msg:  fmt.Sprintf("Error getting current directory: %v", err),
+
+	// Use absolute path instead of relative to current working directory
+	subDir := filepath.Join(fv.Name, dir)
+	if !filepath.IsAbs(subDir) {
+		current, err := os.Getwd()
+		if err != nil {
+			l.Error("base", err.Error())
+			return nil, status{
+				code: 1,
+				msg:  fmt.Sprintf("Error getting current directory: %v", err),
+			}
 		}
+		subDir = filepath.Join(current, subDir)
 	}
-	subDir := filepath.Join(current, dir)
+
 	d, err := os.ReadDir(subDir)
 	if err != nil {
 		l.Error("base", err.Error())
@@ -195,6 +231,7 @@ func (fv *FileView) Expand(dir string) (nfv *FileView, s status) {
 		l.Error("base", s.msg)
 		return nil, s
 	}
+	sub.Name = subDir
 	return &sub, status{
 		code: 0,
 		msg:  fmt.Sprintf("Directory %s expanded successfully", dir),

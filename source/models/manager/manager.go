@@ -1,6 +1,9 @@
 package manager
 
 import (
+	"os"
+	"path/filepath"
+
 	"github.com/MHunterDev/explorer/source/models/paths"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -31,7 +34,7 @@ func (m *Manager) Init() tea.Cmd {
 	m.Input.CharLimit = 256
 	m.Input.Width = 80
 	m.Portal.Height = 20
-	m.Portal.Width = 80
+	m.Portal.Width = 83
 
 	return nil
 }
@@ -55,6 +58,7 @@ func (m *Manager) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.Input, cmd = m.Input.Update(msg)
+		m.Portal, _ = m.Portal.Update(msg)
 		return m, cmd
 
 	case 1: // Viewer mode
@@ -67,22 +71,44 @@ func (m *Manager) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.Selection = 0 // Switch to Input
 				return m, nil
 			}
+
+		}
+
+		switch msg := msg.(type) {
+		case paths.PortalMsg:
+			if msg.Error() != nil {
+				m.Portal.SetContent("Error: " + msg.Error().Error())
+			} else {
+				data, err := os.ReadFile(filepath.Join("", msg.String()))
+				if err != nil {
+					m.Portal.SetContent("Error reading file: " + err.Error())
+				} else {
+					m.Portal.SetContent(string(data))
+				}
+			}
+			return m, nil
 		}
 
 		// Send message to Viewer and get updated model
 		updatedViewer, cmd := m.Viewer.Update(msg)
-		m.Viewer = updatedViewer.(*paths.Viewer)
+		if viewer, ok := updatedViewer.(*paths.Viewer); ok {
+			m.Viewer = viewer
+		}
 		return m, cmd
 	}
-
 	return m, nil
 }
 
+var (
+	viewPosStyle = lipgloss.NewStyle().Align(lipgloss.Left).Padding(0, 1, 0, 0)
+	inputStyle   = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).Padding(1)
+	vpStyle      = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).Padding(1)
+)
+
 func (m *Manager) View() string {
-	viewPos := lipgloss.NewStyle().Align(lipgloss.Left).Padding(0, 1, 0, 0)
-	v := viewPos.Render(m.Viewer.View())
-	input := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).Margin(1, 2).Render(m.Input.View())
-	vp := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).Margin(1, 2).Render(m.Portal.View())
+	v := viewPosStyle.Render(m.Viewer.View())
+	input := inputStyle.Render(m.Input.View())
+	vp := vpStyle.Render(m.Portal.View() + "\n")
 
 	main := lipgloss.JoinVertical(lipgloss.Left, vp, input)
 	output := lipgloss.JoinHorizontal(lipgloss.Top, v, main)

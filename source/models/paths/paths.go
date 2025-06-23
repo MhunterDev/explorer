@@ -1,7 +1,8 @@
 package paths
 
 import (
-	"os/exec"
+	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/MHunterDev/explorer/source/tree"
@@ -83,12 +84,44 @@ func (v *Viewer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if v.Cursor >= len(v.Current.View.Dirs) && v.Cursor < (len(v.Current.View.Files)+len(v.Current.View.Dirs)) {
 				fileName := v.Current.View.Files[v.Cursor-len(v.Current.View.Dirs)]
 				filePath := filepath.Join(v.Current.Name, fileName)
-				// Open the file using the default application
-				cmd := exec.Command("xdg-open", filePath)
-				if err := cmd.Start(); err != nil {
-					return v, tea.Quit
+
+				// Check file size before reading (limit to 10MB)
+				fileInfo, err := os.Stat(filePath)
+				if err != nil {
+					g := PortalMsg{Content: "", Err: err}
+					return v, g.UpdatePortal()
 				}
+
+				const maxFileSize = 10 * 1024 * 1024 // 10MB
+				if fileInfo.Size() > maxFileSize {
+					g := PortalMsg{Content: "", Err: fmt.Errorf("file too large (%d bytes), maximum allowed is %d bytes", fileInfo.Size(), maxFileSize)}
+					return v, g.UpdatePortal()
+				}
+
+				// Read file content directly instead of using less
+				content, err := os.ReadFile(filePath)
+				if err != nil {
+					g := PortalMsg{Content: "", Err: err}
+					return v, g.UpdatePortal()
+				}
+
+				// Create temp file with content
+				file, err := os.CreateTemp("/tmp", "explorer-*.txt")
+				if err != nil {
+					g := PortalMsg{Content: "", Err: err}
+					return v, g.UpdatePortal()
+				}
+				defer file.Close()
+
+				if _, err := file.Write(content); err != nil {
+					g := PortalMsg{Content: "", Err: err}
+					return v, g.UpdatePortal()
+				}
+
+				g := PortalMsg{Content: file.Name(), Err: nil}
+				return v, g.UpdatePortal()
 			}
+
 		case "left", "esc":
 			if v.Current.Parent != nil {
 				v.Current = v.Current.Parent
@@ -143,4 +176,25 @@ func (v *Viewer) View() string {
 	ins := "use arrow keys to navigate\nuse enter to open a directory\nuse left/ESC to go back\nuse Ctrl+C to exit.\n"
 
 	return tree.Border.Render(ins + "\n\n" + output)
+}
+
+type PortalMsg struct {
+	Content string
+	Err     error
+}
+
+func (p PortalMsg) Error() error {
+	return p.Err
+}
+func (p PortalMsg) String() string {
+	return p.Content
+}
+
+func (p *PortalMsg) UpdatePortal() tea.Cmd {
+	return func() tea.Msg {
+		return PortalMsg{
+			Content: p.Content,
+			Err:     p.Err,
+		}
+	}
 }
